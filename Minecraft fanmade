@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MiniCraft Ultimate 1.21</title>
+<style>
+body{margin:0;overflow:hidden;background:#87CEEB;}
+canvas{display:block;}
+#ui{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:5px;flex-wrap:wrap;width:600px;}
+.block{width:40px;height:40px;border:1px solid #000;cursor:pointer;display:flex;justify-content:center;align-items:center;color:white;font-weight:bold;position:relative;}
+.durability{position:absolute;bottom:0;right:0;font-size:10px;color:#0f0;}
+#mode{position:absolute;top:10px;left:10px;font-size:18px;color:white;}
+#health,#hunger{position:absolute;top:10px;right:10px;font-size:18px;color:white;}
+#hand{position:absolute;bottom:50px;right:50px;width:50px;height:50px;background:#f5d6b3;border:2px solid #000;z-index:1000;}
+#downloadBtn{position:absolute;top:10px;left:10px;padding:8px 12px;background:#0f0;color:#000;border:none;cursor:pointer;font-weight:bold;z-index:1000;}
+</style>
+</head>
+<body>
+
+<button id="downloadBtn">💾 Download World</button>
+<div id="mode">Mode: Survival</div>
+<div id="health">Health: 20</div>
+<div id="hunger">Hunger: 20</div>
+<div id="ui"></div>
+<div id="hand"></div>
+<canvas id="game"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/controls/PointerLockControls.js"></script>
+
+<script>
+// --- Scene Setup ---
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer({canvas:document.getElementById('game')});
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+let controls = new THREE.PointerLockControls(camera, document.body);
+document.body.addEventListener('click',()=>controls.lock());
+
+let geo = new THREE.BoxGeometry(1,1,1);
+let materials = {
+ stone:new THREE.MeshBasicMaterial({color:0x808080}),
+ iron:new THREE.MeshBasicMaterial({color:0xD8D8D8}),
+ netherite:new THREE.MeshBasicMaterial({color:0x2D2D2D}),
+ dirt:new THREE.MeshBasicMaterial({color:0x7B3F00}),
+ grass:new THREE.MeshBasicMaterial({color:0x228B22}),
+ netherrack:new THREE.MeshBasicMaterial({color:0x7E2A18}),
+ soulSand:new THREE.MeshBasicMaterial({color:0x53341A}),
+ spawnMob:new THREE.MeshBasicMaterial({color:0xFF00FF}),
+ ironGolem:new THREE.MeshBasicMaterial({color:0xAAAAAA})
+};
+
+// --- World ---
+let world=[]; for(let x=-10;x<=10;x++){for(let z=-10;z<=10;z++){
+ let cube=new THREE.Mesh(geo,materials.grass); cube.position.set(x,0,z); scene.add(cube); world.push(cube);
+}}
+camera.position.y=2;
+
+// --- Inventory ---
+let inventoryBlocks=['stone','iron','netherite','dirt','grass','netherrack','soulSand','spawnMob','ironGolem'];
+let selectedBlock='stone'; let inventory={};
+inventoryBlocks.forEach(b=>inventory[b]=99);
+let ui=document.getElementById('ui');
+function updateUI(){ui.innerHTML='';inventoryBlocks.forEach(block=>{
+ let div=document.createElement('div'); div.className='block'; div.dataset.block=block; div.innerText=block[0].toUpperCase();
+ if(inventory[block]!==undefined){let d=document.createElement('div'); d.className='durability'; d.innerText=inventory[block]; div.appendChild(d);}
+ div.addEventListener('click',()=>selectedBlock=block); ui.appendChild(div);
+});}
+updateUI();
+
+// --- Hand & Off-Hand ---
+let hand = document.getElementById('hand');
+let offHandItem = null;
+let bobbing = true; let bobTime = 0;
+document.addEventListener('keydown', e => {
+ if(e.key==='f'){ [selectedBlock, offHandItem] = [offHandItem || selectedBlock, selectedBlock]; hand.innerText=selectedBlock; }
+ if(e.key==='m'){ bobbing = !bobbing; }
+});
+
+// --- Mouse Actions ---
+document.addEventListener('mousedown', e=>{
+ let raycaster = new THREE.Raycaster(); raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+ let intersects = raycaster.intersectObjects(world);
+ if(intersects.length>0){ let hit=intersects[0].object;
+   if(e.button===0){ scene.remove(hit); world.splice(world.indexOf(hit),1); if(inventory[hit.material.name]!==undefined) inventory[hit.material.name]++; updateUI(); }
+   else if(e.button===2){ let pos = intersects[0].point.clone().add(intersects[0].face.normal); pos.x=Math.round(pos.x); pos.y=Math.round(pos.y); pos.z=Math.round(pos.z);
+     let cube = new THREE.Mesh(geo, materials[selectedBlock]||materials.dirt); cube.position.copy(pos); scene.add(cube); world.push(cube); if(inventory[selectedBlock]>0) inventory[selectedBlock]--; updateUI();
+   }
+ }
+});
+
+// --- Movement ---
+let move={f:0,b:0,l:0,r:0,j:0};
+document.addEventListener('keydown',e=>{if(e.key==='w')move.f=1;if(e.key==='s')move.b=1;if(e.key==='a')move.l=1;if(e.key==='d')move.r=1;if(e.key===' ')move.j=1;});
+document.addEventListener('keyup',e=>{if(e.key==='w')move.f=0;if(e.key==='s')move.b=0;if(e.key==='a')move.l=0;if(e.key==='d')move.r=0;if(e.key===' ')move.j=0;});
+
+// --- Health & Hunger ---
+let health=20,hunger=20;
+function updateStats(){document.getElementById('health').innerText='Health: '+Math.round(health);document.getElementById('hunger').innerText='Hunger: '+Math.round(hunger);}
+setInterval(()=>{if(hunger>0)hunger-=0.01;else health-=0.05; updateStats();},100);
+
+// --- Download World ---
+document.getElementById('downloadBtn').addEventListener('click',()=>{
+ let data = world.map(c=>({x:c.position.x,y:c.position.y,z:c.position.z,type:c.material.color.getHex()}));
+ let blob = new Blob([JSON.stringify(data)],{type:'application/json'});
+ let url = URL.createObjectURL(blob); let a=document.createElement('a'); a.href=url; a.download='minicraft_world.json'; a.click();
+});
+
+// --- Animate ---
+function animate(){
+ requestAnimationFrame(animate);
+ let speed=0.1;
+ if(move.f) controls.moveForward(speed); if(move.b) controls.moveForward(-speed);
+ if(move.l) controls.moveRight(speed); if(move.r) controls.moveRight(-speed);
+ if(move.j) camera.position.y+=0.1;
+
+ // --- Hand Bobbing ---
+ if(bobbing){
+   let movement = move.f || move.b || move.l || move.r;
+   if(movement) bobTime += 0.1;
+   hand.style.transform = `translate(${Math.sin(bobTime)*2}px, ${Math.abs(Math.sin(bobTime*2))*5}px)`;
+ } else {
+   hand.style.transform = `translate(0px,0px)`;
+ }
+
+ renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
